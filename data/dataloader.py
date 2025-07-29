@@ -16,18 +16,28 @@ from .booksdataset import BookCrossingIterableDataset, DEFAULT_RATINGS_COLUMN_NA
 
 UID_KEY, ITEMID_KEY, RATING_KEY = DEFAULT_RATINGS_COLUMN_NAMES[:3]
 
-def _hash_str(s: str, mod: int) -> int:
-    h = hashlib.md5(str(s).encode("utf-8")).hexdigest()
-    return int(h, 16) % mod
 
-def _collate_to_batch(rows: List[Dict[str, str]], num_embeddings: int) -> Batch:
-    # IDs as strings → hash to [0, num_embeddings)
-    u_vals = [_hash_str(r[UID_KEY], num_embeddings) for r in rows]
-    i_vals = [_hash_str(r[ITEMID_KEY], num_embeddings) for r in rows]
+def _collate_to_batch(rows, id_maps=None, add_oov=True, num_embeddings=None):
+    # use contiguous ids
+    u2i = id_maps["user2ix"]
+    b2i = id_maps["isbn2ix"]
 
-    # Build KJT with keys expected by the two-tower example: ["userId","movieId"]
-    values  = torch.tensor(u_vals + i_vals, dtype=torch.long)
-    lengths = torch.ones(len(rows) * 2, dtype=torch.int32)  # 2 features per sample
+    # column names (first two of DEFAULT_RATINGS_COLUMN_NAMES)
+    UID_KEY, ITEMID_KEY = DEFAULT_RATINGS_COLUMN_NAMES[:2]
+
+    u_vals = [u2i.get(r[UID_KEY], -1) for r in rows]
+    i_vals = [b2i.get(r[ITEMID_KEY], -1) for r in rows]
+
+    if add_oov:
+      u_oov = len(u2i); i_oov = len(b2i)
+      u_vals = [v if v >= 0 else u_oov for v in u_vals]
+      i_vals = [v if v >= 0 else i_oov for v in i_vals]
+    else:
+      # drop rows with unknown ids
+      keep = [i for i,(u,iid) in enumerate(zip(u_vals,i_vals)) if u>=0 and iid>=0]
+      rows   = [rows[i] for i in keep]
+      u_vals = [u_vals[i] for i in keep]
+      i_vals = [i_vals[i] for i in keep]
 
     kjt = KeyedJaggedTensor.from_lengths_sync(
         keys=[UID_KEY, ITEMID_KEY],
@@ -42,20 +52,24 @@ def _collate_to_batch(rows: List[Dict[str, str]], num_embeddings: int) -> Batch:
     )
     return Batch(sparse_features=kjt, dense_features=None, labels=labels)
 
+
+
 def get_dataloader(
     batch_size: int,
-    num_embeddings: int,
+    num_embeddings: int = None,
     pin_memory: bool = False,
     num_workers: int = 0,
     *,
     data_path: str = "data",
     include_users_data: bool = True,
     include_books_data: bool = True,
-    filter_to_catalog: bool = False
+    filter_to_catalog: bool = False,
+    id_maps=None, 
+    add_oov=True
 ) -> DataLoader:
     """
     Single DataLoader (like the original example), now reading Book-Crossing.
-    num_embeddings = hash bucket size used for BOTH userId and movieId.
+    num_embeddings = obsolete
     """
     dataset = BookCrossingIterableDataset(
         data_path,
@@ -68,7 +82,7 @@ def get_dataloader(
         batch_size=batch_size,
         num_workers=num_workers,
         pin_memory=pin_memory,
-        collate_fn=lambda rows: _collate_to_batch(rows, num_embeddings),
+        collate_fn=lambda rows: _collate_to_batch(rows, num_embeddings=num_embeddings, id_maps=id_maps, add_oov=add_oov),
         drop_last=False,
     )
     return loader

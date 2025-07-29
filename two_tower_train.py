@@ -11,7 +11,7 @@
 
 import os
 from typing import List, Optional
-
+import json 
 import click
 
 import faiss  # @manual=//faiss/python:pyfaiss_gpu
@@ -63,25 +63,106 @@ except ImportError:
 
 
 @click.command()
+@click.option("--data-path", type=click.Path(exists=True, file_okay=False), default="data",
+              help="Folder containing Ratings.csv / Users.csv / Books.csv and id-maps JSON.")
+@click.option("--id-maps-json", type=click.STRING, default="id_maps.json",
+              help="Filename of the JSON with user2ix/isbn2ix in data_path.")
+@click.option("--add-oov/--no-add-oov", default=True,
+              help="Reserve an extra row per table for unseen IDs (OOV fallback).")
+@click.option("--embedding-dim", type=int, default=64, show_default=True)
+@click.option("--layer-sizes", type=str, default="128,64",
+              help="Comma-separated MLP sizes; last size should match embedding-dim.")
+@click.option("--embed-lr", type=float, default=0.02, show_default=True,
+              help="Learning rate for embedding tables (RowWiseAdagrad).")
+@click.option("--dense-lr", type=float, default=3e-4, show_default=True,
+              help="Learning rate for dense params (Adam).")
+@click.option("--batch-size", type=int, default=8192, show_default=True)
+@click.option("--num-iterations", type=int, default=10000, show_default=True,
+              help="Number of training steps (batches).")
+@click.option("--num-workers", type=int, default=0, show_default=True)
+@click.option("--faiss-num-centroids", type=int, default=1024, show_default=True)
+@click.option("--faiss-num-subquantizers", type=int, default=16, show_default=True)
+@click.option("--faiss-bits-per-code", type=int, default=8, show_default=True)
+@click.option("--faiss-num-probe", type=int, default=8, show_default=True)
 @click.option(
     "--save_dir",
     type=click.STRING,
     default=None,
     help="Directory to save model and faiss index. If None, nothing is saved",
 )
-def main(save_dir: Optional[str]) -> None:
-    train(save_dir=save_dir)
+def main(
+    data_path: str,
+    id_maps_json: str,
+    add_oov: bool,
+    embedding_dim: int,
+    layer_sizes: str,
+    embed_lr: float,
+    dense_lr: float,
+    batch_size: int,
+    num_iterations: int,
+    num_workers: int,
+    faiss_num_centroids: int,
+    faiss_num_subquantizers: int,
+    faiss_bits_per_code: int,
+    faiss_num_probe: int,
+    save_dir: Optional[str],
+) -> None:
+    # parse layer sizes
+    layer_sizes_list = [int(x) for x in layer_sizes.split(",") if x.strip()]
+    if not layer_sizes_list:
+        layer_sizes_list = [128, 64]
+
+    # load contiguous ID maps
+    maps_path = os.path.join(data_path, id_maps_json)
+    with open(maps_path, "r") as f:
+        id_maps = json.load(f)
+    user2ix = id_maps["user2ix"]
+    isbn2ix = id_maps["isbn2ix"]
+
+    # table sizes (+1 if OOV)
+    num_embeddings_user = int(id_maps.get("num_embeddings_user", len(user2ix)))
+    num_embeddings_item = int(id_maps.get("num_embeddings_item", len(isbn2ix)))
+    if add_oov:
+        num_embeddings_user += 1
+        num_embeddings_item += 1
+
+    train(
+        data_path=data_path,
+        id_maps={"user2ix": user2ix, "isbn2ix": isbn2ix},
+        add_oov=add_oov,
+        num_embeddings_user=num_embeddings_user,
+        num_embeddings_item=num_embeddings_item,
+        embedding_dim=embedding_dim,
+        layer_sizes=layer_sizes_list,
+        embed_lr=embed_lr,
+        dense_lr=dense_lr,
+        batch_size=batch_size,
+        num_iterations=num_iterations,
+        num_workers=num_workers,
+        num_centroids=faiss_num_centroids,
+        num_subquantizers=faiss_num_subquantizers,
+        bits_per_code=faiss_bits_per_code,
+        num_probe=faiss_num_probe,
+        save_dir=save_dir,
+    )
 
 
 def train(
-    num_embeddings: int = 1024**2,
+    *,
+    data_path: str,
+    id_maps: dict,
+    add_oov: bool,
+    num_embeddings_user: int,
+    num_embeddings_item: int,
     embedding_dim: int = 64,
     layer_sizes: Optional[List[int]] = None,
-    learning_rate: float = 0.01,
-    batch_size: int = 32,
-    num_iterations: int = 100,
-    num_centroids: int = 100,
-    num_subquantizers: int = 8,
+    embed_lr: float = 0.02,
+    dense_lr: float = 3e-4,
+    batch_size: int = 8192,
+    num_iterations: int = 10000,
+    num_workers: int = 0,
+    num_centroids: int = 1024,
+    num_subquantizers: int = 16,
     bits_per_code: int = 8,
     num_probe: int = 8,
     save_dir: Optional[str] = None,
@@ -128,7 +209,7 @@ def train(
             num_embeddings=num_embeddings,
             feature_names=[feature_name],
         )
-        for feature_name in two_tower_column_names
+        for feature_name, num_embeddings in zip(two_tower_column_names, [num_embeddings_user, num_embeddings_item])
     ]
     embedding_bag_collection = EmbeddingBagCollection(
         tables=eb_configs,
@@ -143,7 +224,7 @@ def train(
     apply_optimizer_in_backward(
         RowWiseAdagrad,
         two_tower_train_task.two_tower.ebc.parameters(),
-        {"lr": learning_rate},
+        {"lr": embed_lr},
     )
     model = DistributedModelParallel(
         module=two_tower_train_task,
@@ -152,7 +233,7 @@ def train(
 
     optimizer = KeyedOptimizerWrapper(
         dict(model.named_parameters()),
-        lambda params: torch.optim.Adam(params, lr=learning_rate),
+        lambda params: torch.optim.Adam(params, lr=dense_lr),
     )
 
     catalog_mode: Literal["joined","full"]="joined"
@@ -160,8 +241,11 @@ def train(
         batch_size=batch_size,
         num_embeddings=num_embeddings,
         pin_memory=(backend == "nccl"),
-        data_path="data",
+        num_workers=num_workers,
+        data_path=data_path,
         filter_to_catalog=(catalog_mode=="joined")
+        id_maps=id_maps,
+        add_oov=add_oov,
     )
     dl_iterator = iter(dataloader)
     train_pipeline = TrainPipelineSparseDist(
@@ -208,14 +292,12 @@ def train(
             device=torch.device("cpu"),
         )
 
-        values = torch.tensor(list(range(num_embeddings)), device=torch.device("cpu"))
+        num_items_no_oov = num_embeddings_item - (1 if add_oov else 0)
+        values = torch.arange(num_items_no_oov, device=torch.device("cpu"))
         kjt = KeyedJaggedTensor(
             keys=two_tower_column_names,
             values=values,
-            lengths=torch.tensor(
-                [0] * num_embeddings + [1] * num_embeddings,
-                device=torch.device("cpu"),
-            ),
+            lengths=torch.tensor([0] * num_items_no_oov + [1] * num_items_no_oov, device=torch.device("cpu")),
         )
 
         # Get the embeddings of the item(movie) tower by querying model
