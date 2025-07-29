@@ -63,6 +63,14 @@ except ImportError:
 
 
 @click.command()
+@click.option(
+    "--catalog-mode",
+    type=click.Choice(["joined", "full"], case_sensitive=False),
+    default="joined",
+    show_default=True,
+    help="joined = train only on rows that exist in Users/Books (inner-join). "
+         "full = keep all ratings rows (left-join with defaults).",
+)
 @click.option("--data-path", type=click.Path(exists=True, file_okay=False), default="data",
               help="Folder containing Ratings.csv / Users.csv / Books.csv and id-maps JSON.")
 @click.option("--id-maps-json", type=click.STRING, default="id_maps.json",
@@ -91,6 +99,7 @@ except ImportError:
     help="Directory to save model and faiss index. If None, nothing is saved",
 )
 def main(
+    catalog_mode: Literal["joined", "full"],
     data_path: str,
     id_maps_json: str,
     add_oov: bool,
