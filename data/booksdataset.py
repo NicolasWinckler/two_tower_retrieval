@@ -49,7 +49,7 @@ def _parse_country(loc: str) -> str:
     parts = [p.strip() for p in loc.split(",") if p.strip()]
     return parts[-1] if parts else ""
 
-def _join_with_users(datapipe: IterDataPipe, root: str, , filter_to_catalog: bool = False) -> IterDataPipe:
+def _join_with_users(datapipe: IterDataPipe, root: str, filter_to_catalog: bool = False) -> IterDataPipe:
     users_path = os.path.join(root, USERS_FILENAME)
     udp = LoadFiles((users_path,), mode="r")
     udp = ReadLinesFromCSV(udp, skip_first_line=True, delimiter=",")
@@ -72,7 +72,7 @@ def _join_with_users(datapipe: IterDataPipe, root: str, , filter_to_catalog: boo
 
     return datapipe.map(join_user)
 
-def _join_with_books(datapipe: IterDataPipe, root: str, , filter_to_catalog: bool = False) -> IterDataPipe:
+def _join_with_books(datapipe: IterDataPipe, root: str, filter_to_catalog: bool = False) -> IterDataPipe:
     books_path = os.path.join(root, BOOKS_FILENAME)
     bdp = LoadFiles((books_path,), mode="r")
     bdp = ReadLinesFromCSV(bdp, skip_first_line=True, delimiter=",")

@@ -248,11 +248,10 @@ def train(
     catalog_mode: Literal["joined","full"]="joined"
     dataloader = get_dataloader(
         batch_size=batch_size,
-        num_embeddings=num_embeddings,
         pin_memory=(backend == "nccl"),
         num_workers=num_workers,
         data_path=data_path,
-        filter_to_catalog=(catalog_mode=="joined")
+        filter_to_catalog=(catalog_mode=="joined"),
         id_maps=id_maps,
         add_oov=add_oov,
     )
