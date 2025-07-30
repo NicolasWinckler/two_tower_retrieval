@@ -10,7 +10,7 @@
 #!/usr/bin/env python3
 
 import os
-from typing import List, Optional
+from typing import List, Optional, Literal
 import json 
 import click
 
@@ -93,6 +93,12 @@ except ImportError:
 @click.option("--faiss-bits-per-code", type=int, default=8, show_default=True)
 @click.option("--faiss-num-probe", type=int, default=8, show_default=True)
 @click.option(
+    "--side-features/--no-side-features",
+    default=False,
+    show_default=True,
+    help="If enabled, train with Users.csv and Books.csv side features in both towers.",
+)
+@click.option(
     "--save_dir",
     type=click.STRING,
     default=None,
@@ -115,6 +121,7 @@ def main(
     faiss_bits_per_code: int,
     faiss_num_probe: int,
     save_dir: Optional[str],
+    side_features: bool
 ) -> None:
     # parse layer sizes
     layer_sizes_list = [int(x) for x in layer_sizes.split(",") if x.strip()]
@@ -153,6 +160,7 @@ def main(
         bits_per_code=faiss_bits_per_code,
         num_probe=faiss_num_probe,
         save_dir=save_dir,
+        side_features=side_features
     )
 
 
@@ -175,6 +183,8 @@ def train(
     bits_per_code: int = 8,
     num_probe: int = 8,
     save_dir: Optional[str] = None,
+    side_features: bool = False
+
 ) -> None:
     """
     Trains a simple Two Tower (UV) model, which is a simplified version of [A Dual Augmented Two-tower Model for Online Large-scale Recommendation](https://dlp-kdd.github.io/assets/pdf/DLP-KDD_2021_paper_4.pdf).
@@ -210,6 +220,7 @@ def train(
         backend = "gloo"
     dist.init_process_group(backend=backend)
 
+    # config for encoding userID and itemID
     two_tower_column_names = DEFAULT_RATINGS_COLUMN_NAMES[:2]
     eb_configs = [
         EmbeddingBagConfig(
@@ -220,6 +231,7 @@ def train(
         )
         for feature_name, num_embeddings in zip(two_tower_column_names, [num_embeddings_user, num_embeddings_item])
     ]
+
     embedding_bag_collection = EmbeddingBagCollection(
         tables=eb_configs,
         device=torch.device("meta"),
@@ -254,6 +266,8 @@ def train(
         filter_to_catalog=(catalog_mode=="joined"),
         id_maps=id_maps,
         add_oov=add_oov,
+        include_users_data=side_features,
+        include_books_data=side_features
     )
     dl_iterator = iter(dataloader)
     train_pipeline = TrainPipelineSparseDist(
