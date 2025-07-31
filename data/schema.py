@@ -1,5 +1,6 @@
 # retrieval/data/schema.py
 from .booksdataset import DEFAULT_RATINGS_COLUMN_NAMES
+from typing import List, Optional, Literal
 UID_KEY, ITEMID_KEY, RATING_KEY = DEFAULT_RATINGS_COLUMN_NAMES[:3]
 
 DEFAULT_RATINGS_COLUMN_NAMES: List[str] = ['User-ID', 'ISBN', 'Book-Rating']

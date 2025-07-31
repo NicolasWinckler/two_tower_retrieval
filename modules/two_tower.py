@@ -170,7 +170,7 @@ class TwoTowerRetrieval(nn.Module):
     def __init__(
         self,
         # pyre-ignore[11]
-        faiss_index: Union[faiss.GpuIndexIVFPQ, faiss.IndexIVFPQ],
+        faiss_index: faiss.IndexIVFPQ,
         query_ebc: EmbeddingBagCollection,
         candidate_ebc: EmbeddingBagCollection,
         layer_sizes: List[int],
@@ -200,7 +200,7 @@ class TwoTowerRetrieval(nn.Module):
             device=device,
             dtype=dtype,
         )
-        self.faiss_index: Union[faiss.GpuIndexIVFPQ, faiss.IndexIVFPQ] = faiss_index
+        self.faiss_index: faiss.IndexIVFPQ = faiss_index
         self.k = k
         self.device = device
 

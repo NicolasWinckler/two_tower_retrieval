@@ -23,7 +23,7 @@ from torch.distributed.optim import (
 )
 from torchrec import inference as trec_infer
 #from torchrec.datasets.movielens import DEFAULT_RATINGS_COLUMN_NAMES
-from .data.booksdataset import DEFAULT_RATINGS_COLUMN_NAMES
+from retrieval.data.booksdataset import DEFAULT_RATINGS_COLUMN_NAMES
 from torchrec.distributed import TrainPipelineSparseDist
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.inference.state_dict_transform import (
@@ -35,7 +35,7 @@ from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-
+from retrieval.data.schema import UID_KEY, ITEMID_KEY, USER_COUNTRY, USER_AGE, ITEM_AUTHOR, ITEM_PUB, ITEM_YEAR, ITEM_TITLE
 
 # OSS import
 try:
@@ -99,7 +99,7 @@ except ImportError:
     help="If enabled, train with Users.csv and Books.csv side features in both towers.",
 )
 @click.option(
-    "--save_dir",
+    "--save-dir",
     type=click.STRING,
     default=None,
     help="Directory to save model and faiss index. If None, nothing is saved",
@@ -231,6 +231,15 @@ def train(
         )
         for feature_name, num_embeddings in zip(two_tower_column_names, [num_embeddings_user, num_embeddings_item])
     ]
+    if side_features:
+        eb_configs += [
+            EmbeddingBagConfig(name=USER_COUNTRY,  embedding_dim=D, num_embeddings=65_536,   feature_names=[USER_COUNTRY]),
+            EmbeddingBagConfig(name=USER_AGE,      embedding_dim=D, num_embeddings=20,      feature_names=[USER_AGE]),
+            EmbeddingBagConfig(name=ITEM_AUTHOR,   embedding_dim=D, num_embeddings=200_000, feature_names=[ITEM_AUTHOR]),
+            EmbeddingBagConfig(name=ITEM_PUB      ,embedding_dim=D, num_embeddings=66_000,  feature_names=[ITEM_PUB]),
+            EmbeddingBagConfig(name=ITEM_YEAR,     embedding_dim=D, num_embeddings=20,      feature_names=[ITEM_YEAR]),
+            EmbeddingBagConfig(name=ITEM_TITLE,    embedding_dim=D, num_embeddings=200_000, feature_names=[ITEM_TITLE]),
+        ]
 
     embedding_bag_collection = EmbeddingBagCollection(
         tables=eb_configs,
@@ -260,7 +269,7 @@ def train(
     catalog_mode: Literal["joined","full"]="joined"
     dataloader = get_dataloader(
         batch_size=batch_size,
-        pin_memory=(backend == "nccl"),
+        pin_memory=False,
         num_workers=num_workers,
         data_path=data_path,
         filter_to_catalog=(catalog_mode=="joined"),

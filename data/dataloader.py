@@ -71,6 +71,16 @@ def _collate_to_batch(
         ITEM_YEAR: 12,
         ITEM_TITLE: 100_000
     }
+    if not rows:
+        kjt_empty = KeyedJaggedTensor.from_lengths_sync(
+            keys=[], values=torch.tensor([], dtype=torch.long),
+            lengths=torch.tensor([], dtype=torch.int32),
+        )
+        return Batch(
+            sparse_features=kjt_empty,
+            dense_features=torch.empty((0, 0), dtype=torch.float32),  # NOT None
+            labels=torch.empty(0, dtype=torch.float32),
+        )
 
     u2i = id_maps["user2ix"]
     i2i = id_maps["isbn2ix"]
@@ -141,7 +151,9 @@ def _collate_to_batch(
         [1.0 if safe_cast(r[RATING_KEY], float, 0.0) >= 4.0 else 0.0 for r in rows],
         dtype=torch.float32,
     )
-    return Batch(sparse_features=kjt, dense_features=None, labels=labels)
+    B = len(rows)
+    dense = torch.empty((B, 0), dtype=torch.float32)  # NOT None
+    return Batch(sparse_features=kjt, dense_features=dense, labels=labels)
 
 # ----------------- factory -----------------
 
