@@ -9,7 +9,7 @@ SAVE_DIR="${SAVE_DIR:-out}"
 
 
 mkdir -p "${SAVE_DIR}"
-CUDA_VISIBLE_DEVICES="3" 
+CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 NUM_GPUS=1
 
 torchrun --standalone --nproc_per_node=1 -m retrieval.two_tower_train \
