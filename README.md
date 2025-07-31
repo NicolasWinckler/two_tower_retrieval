@@ -56,3 +56,4 @@ Run the inference script:
 * Add text encoder for book title
 * Retrieve book covers and add an image encoder for additional metada
 * Clean and simplify workflow
+* Add MLFLow/TensorBoard support

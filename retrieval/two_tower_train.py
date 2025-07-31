@@ -71,6 +71,8 @@ except ImportError:
     help="joined = train only on rows that exist in Users/Books (inner-join). "
          "full = keep all ratings rows (left-join with defaults).",
 )
+@click.option("--epochs", type=click.INT, default=5, show_default=True,
+    help="Number of epochs (each epoch runs up to --num-iterations steps).")
 @click.option("--data-path", type=click.Path(exists=True, file_okay=False), default="data",
               help="Folder containing Ratings.csv / Users.csv / Books.csv and id-maps JSON.")
 @click.option("--id-maps-json", type=click.STRING, default="id_maps.json",
@@ -121,7 +123,8 @@ def main(
     faiss_bits_per_code: int,
     faiss_num_probe: int,
     save_dir: Optional[str],
-    side_features: bool
+    side_features: bool,
+    epochs: int = 5
 ) -> None:
     # parse layer sizes
     layer_sizes_list = [int(x) for x in layer_sizes.split(",") if x.strip()]
@@ -160,7 +163,8 @@ def main(
         bits_per_code=faiss_bits_per_code,
         num_probe=faiss_num_probe,
         save_dir=save_dir,
-        side_features=side_features
+        side_features=side_features, 
+        epochs=epochs
     )
 
 
@@ -183,7 +187,8 @@ def train(
     bits_per_code: int = 8,
     num_probe: int = 8,
     save_dir: Optional[str] = None,
-    side_features: bool = False
+    side_features: bool = False,
+    epochs: int = 5
 
 ) -> None:
     """
@@ -278,7 +283,7 @@ def train(
         include_users_data=side_features,
         include_books_data=side_features
     )
-    dl_iterator = iter(dataloader)
+
     train_pipeline = TrainPipelineSparseDist(
         model,
         optimizer,
@@ -286,11 +291,18 @@ def train(
     )
 
     # Train model
-    for _ in range(num_iterations):
-        try:
-            train_pipeline.progress(dl_iterator)
-        except StopIteration:
-            break
+    for epoch in range(epochs):
+        if rank == 0:
+            print(f"\nEpoch {epoch+1}/{epochs}")
+        dl_iterator = iter(dataloader)
+        # todo: check potential log issue in distributed training
+        for steps in range(num_iterations):
+            try:
+                train_pipeline.progress(dl_iterator)
+            except StopIteration:
+                break
+        if rank == 0:
+            print(f"Finished epoch {epoch+1}: steps={steps}")
 
     checkpoint_pg = dist.new_group(backend="gloo")
     # Copy sharded state_dict to CPU.

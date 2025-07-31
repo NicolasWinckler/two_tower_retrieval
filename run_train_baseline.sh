@@ -15,8 +15,8 @@ NUM_GPUS=1
 torchrun --standalone --nproc_per_node=1 -m retrieval.two_tower_train \
   --data-path "${DATA_PATH}" --id-maps-json id_maps.json \
   --no-side-features --catalog-mode joined \
-  --batch-size 8192 --num-iterations 10000 \
-  --num-workers 0 --save-dir "${SAVE_DIR}"
+  --batch-size 8192 --epochs 10 \
+  --num-workers 0 --save-dir "${SAVE_DIR}" 
 
 echo "[DONE] Artifacts saved to: ${SAVE_DIR}"
 
