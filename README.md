@@ -15,7 +15,7 @@ docker compose up
 ### Prepare data and environment variables
 Download and unzip the Book dataset. Set input and output via environment variables:
 ```bash
-export DATA_PATH=/path/to/csv/fles
+export DATA_PATH=/path/to/csv/files
 export SAVE_DIR=/path/to/output
 ```
 
