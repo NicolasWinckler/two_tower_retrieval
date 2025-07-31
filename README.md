@@ -11,6 +11,33 @@ docker compose build
 docker compose up
 ```
 
+## How to run?
+### Prepare data and environment variables
+Download and unzip the Book dataset. Set input and output via environment variables:
+```bash
+export DATA_PATH=/path/to/csv/fles
+export SAVE_DIR=/path/to/output
+```
+
+Run the preprocessng script only once:
+```bash
+python3 retrieval/preprocess.py --root-dir ${DATA_PATH} --out-dir ${DATA_PATH}
+```
+
+### Training
+Run the traning script:
+```bash
+./run_train_baseline.sh
+```
+
+### Inference
+Run the inference script:
+```bash
+./run_infer_baseline.sh
+```
+
+
+
 ## Added features
 * Docker image with TorchRec and fbgemm-gpu and other dependencies
 * Torch dataset and dataloader for the book recommendation dataset

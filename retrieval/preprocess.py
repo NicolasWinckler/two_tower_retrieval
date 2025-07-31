@@ -23,12 +23,6 @@ def parse_args():
         default=Path.cwd(),
         help="Output directory. Defaults to current working directory."
     )
-    
-    parser.add_argument(
-        "-a", "--add-oov",
-        default=True,
-        help="Out of vocabulary option."
-    )
     return parser.parse_args()
 
 
@@ -38,7 +32,7 @@ if __name__ == "__main__":
     print(f"Using root dir: {args.root_dir}")
     data_path = args.root_dir
     save_dir = args.out_dir
-    add_oov = args.add_oov
+
     users = pd.read_csv(f"{data_path}/Users.csv", usecols=["User-ID"])
     books = pd.read_csv(f"{data_path}/Books.csv", usecols=["ISBN"])
 
